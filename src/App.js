@@ -286,7 +286,7 @@ const CoverLetterGenerator = () => {
   };
   
   // Use a previous cover letter as the base
-  const usePreviousCoverLetter = (id) => {
+  const loadPreviousCoverLetter = (id) => {
     const letter = previousCoverLetters.find(letter => letter.id === id);
     if (letter) {
       setCoverLetter(letter.content);
@@ -666,7 +666,7 @@ const CoverLetterGenerator = () => {
                       <div>
                         <button
                           className="link-button"
-                          onClick={() => usePreviousCoverLetter(letter.id)}
+                          onClick={() => loadPreviousCoverLetter(letter.id)}
                         >
                           Use as Template
                         </button>
