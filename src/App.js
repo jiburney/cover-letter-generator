@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Settings, User, History } from 'lucide-react';
+import './App.css'; // We'll create this CSS file
 
 const CoverLetterGenerator = () => {
   // State variables
@@ -13,35 +13,30 @@ const CoverLetterGenerator = () => {
   const [resume, setResume] = useState('');
   const [linkedinProfile, setLinkedinProfile] = useState('');
   const [previousCoverLetters, setPreviousCoverLetters] = useState([]);
-  const [apiKey, setApiKey] = useState(localStorage.getItem('aiApiKey') || '');
+  const [apiKey, setApiKey] = useState('');
   const [activeTab, setActiveTab] = useState('generate');
+  
+  // New state for Story Bank and Job Analysis
+  const [stories, setStories] = useState([]);
+  const [jobAnalysis, setJobAnalysis] = useState({
+    keyRequirements: '',
+    companyValues: '',
+    specificInterests: '',
+    relevantStories: []
+  });
 
-  // Load saved data from localStorage on component mount
+  // Load saved data on component mount
   useEffect(() => {
-    // Load saved cover letters
-    const savedData = localStorage.getItem('savedCoverLetters');
-    if (savedData) {
-      setSavedLetters(JSON.parse(savedData));
-    }
-    
-    // Load resume
-    const savedResume = localStorage.getItem('resume');
-    if (savedResume) {
-      setResume(savedResume);
-    }
-    
-    // Load LinkedIn profile
-    const savedLinkedin = localStorage.getItem('linkedinProfile');
-    if (savedLinkedin) {
-      setLinkedinProfile(savedLinkedin);
-    }
-    
-    // Load previous cover letters
-    const savedPreviousLetters = localStorage.getItem('previousCoverLetters');
-    if (savedPreviousLetters) {
-      setPreviousCoverLetters(JSON.parse(savedPreviousLetters));
-    }
+    // Initialize with empty data - you could add localStorage here if needed
+    setSavedLetters([]);
+    setStories([]);
   }, []);
+
+  // Show feedback with auto-hide
+  const showFeedback = (message) => {
+    setFeedback(message);
+    setTimeout(() => setFeedback(''), 3000);
+  };
 
   // Handle file upload for job description
   const handleFileUpload = (event) => {
@@ -66,9 +61,7 @@ const CoverLetterGenerator = () => {
     reader.onload = (e) => {
       const content = e.target.result;
       setResume(content);
-      localStorage.setItem('resume', content);
-      setFeedback('Resume uploaded successfully!');
-      setTimeout(() => setFeedback(''), 2000);
+      showFeedback('Resume uploaded successfully!');
     };
     reader.readAsText(file);
   };
@@ -95,9 +88,7 @@ const CoverLetterGenerator = () => {
         
         if (filesProcessed === files.length) {
           setPreviousCoverLetters(newLetters);
-          localStorage.setItem('previousCoverLetters', JSON.stringify(newLetters));
-          setFeedback(`${files.length} cover letter(s) uploaded successfully!`);
-          setTimeout(() => setFeedback(''), 2000);
+          showFeedback(`${files.length} cover letter(s) uploaded successfully!`);
         }
       };
       reader.readAsText(file);
@@ -106,44 +97,69 @@ const CoverLetterGenerator = () => {
   
   // Save API key
   const saveApiKey = () => {
-    localStorage.setItem('aiApiKey', apiKey);
-    setFeedback('API key saved successfully!');
-    setTimeout(() => setFeedback(''), 2000);
+    showFeedback('API key saved successfully!');
   };
-  
-  // Generate cover letter based on job description and user profile
+
+  // Add new story
+  const addStory = () => {
+    const newStory = {
+      id: Date.now(),
+      title: '',
+      category: '',
+      content: '',
+      skills: []
+    };
+    setStories([...stories, newStory]);
+  };
+
+  // Update story
+  const updateStory = (id, field, value) => {
+    setStories(stories.map(story => {
+      if (story.id === id) {
+        if (field === 'skills') {
+          return { ...story, [field]: value.split(',').map(s => s.trim()).filter(s => s) };
+        }
+        return { ...story, [field]: value };
+      }
+      return story;
+    }));
+  };
+
+  // Delete story
+  const deleteStory = (id) => {
+    setStories(stories.filter(story => story.id !== id));
+  };
+
+  // Generate cover letter
   const generateCoverLetter = async () => {
     if (!jobDescription.trim()) {
-      setFeedback('Please enter a job description');
+      showFeedback('Please enter a job description');
       return;
     }
     
     if (!apiKey.trim()) {
-      setFeedback('Please enter an API key in the Settings tab');
+      showFeedback('Please enter an API key in the Settings tab');
       return;
     }
     
     setIsGenerating(true);
-    setFeedback('Generating your cover letter...');
+    showFeedback('Generating your cover letter...');
     
     try {
-      // Prepare the data for the API request
       const prompt = createPromptForAI();
-      
-      // Make API request to Claude or another AI service
       const response = await callAIApi(prompt);
       
       setCoverLetter(response);
       setIsGenerating(false);
-      setFeedback('Cover letter generated! Feel free to edit before saving.');
+      showFeedback('Cover letter generated! Feel free to edit before saving.');
     } catch (error) {
       console.error('Error generating cover letter:', error);
       setIsGenerating(false);
-      setFeedback(`Error: ${error.message || 'Failed to generate cover letter'}`);
+      showFeedback(`Error: ${error.message || 'Failed to generate cover letter'}`);
     }
   };
   
-  // Create a prompt for the AI
+  // Create AI prompt
   const createPromptForAI = () => {
     let prompt = `Please write a professional cover letter for the following job description:\n\n${jobDescription}\n\n`;
     
@@ -154,6 +170,25 @@ const CoverLetterGenerator = () => {
     if (linkedinProfile) {
       prompt += `Additional professional information from LinkedIn:\n\n${linkedinProfile}\n\n`;
     }
+
+    // Add job analysis context
+    if (jobAnalysis.keyRequirements || jobAnalysis.companyValues || jobAnalysis.specificInterests) {
+      prompt += `Job Analysis Context:\n`;
+      if (jobAnalysis.keyRequirements) prompt += `Key Requirements: ${jobAnalysis.keyRequirements}\n`;
+      if (jobAnalysis.companyValues) prompt += `Company Values: ${jobAnalysis.companyValues}\n`;
+      if (jobAnalysis.specificInterests) prompt += `What excites me about this role: ${jobAnalysis.specificInterests}\n\n`;
+    }
+
+    // Add relevant stories
+    if (jobAnalysis.relevantStories.length > 0) {
+      prompt += `Relevant background stories to incorporate:\n`;
+      jobAnalysis.relevantStories.forEach(storyId => {
+        const story = stories.find(s => s.id === parseInt(storyId));
+        if (story) {
+          prompt += `${story.title} (${story.category}): ${story.content}\n\n`;
+        }
+      });
+    }
     
     if (previousCoverLetters.length > 0) {
       prompt += `Here are examples of my previous cover letters for reference (match my style and tone):\n\n`;
@@ -162,47 +197,41 @@ const CoverLetterGenerator = () => {
       });
     }
     
-    // Add instructions for the AI
+    // Enhanced instructions for the AI
     prompt += `Instructions:
     1. Write a compelling, professional cover letter that highlights my relevant skills and experience for this specific job.
-    2. Keep the letter concise, around 300-400 words.
-    3. Match the tone to my previous cover letters if provided.
-    4. Include a personalized introduction that shows understanding of the company and role.
-    5. Format with proper business letter structure including date and greeting.`;
+    2. Use the job analysis context to focus on what matters most to this employer.
+    3. Incorporate the relevant stories naturally - don't force them if they don't fit well.
+    4. Keep the letter concise, around 300-400 words.
+    5. Match the tone to my previous cover letters if provided.
+    6. Include a personalized introduction that shows understanding of the company and role.
+    7. Format with proper business letter structure including date and greeting.
+    8. Structure as: Hook + Experience Connection + Unique Differentiator + Strategic Thinking + Enthusiastic Close`;
     
     return prompt;
   };
   
-  // Call the AI API
+  // Call AI API
   const callAIApi = async (prompt) => {
-    // This example uses Claude API, but you can replace with any AI API
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('http://localhost:3001/api/claude', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
-          model: 'claude-3-haiku-20240307',
-          max_tokens: 1024,
-          messages: [
-            {
-              role: 'user',
-              content: prompt
-            }
-          ]
+          prompt: prompt,
+          apiKey: apiKey
         })
       });
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'API request failed');
+        throw new Error(errorData.error || 'API request failed');
       }
       
       const data = await response.json();
-      return data.content[0].text;
+      return data.content;
     } catch (error) {
       console.error('Error calling AI API:', error);
       throw error;
@@ -220,16 +249,14 @@ const CoverLetterGenerator = () => {
       jobDescription: jobDescription,
       draft: coverLetter,
       final: finalCoverLetter || coverLetter,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      jobAnalysis: jobAnalysis
     };
     
     const updatedLetters = [...savedLetters, newSavedLetter];
     setSavedLetters(updatedLetters);
     
-    // Save to localStorage
-    localStorage.setItem('savedCoverLetters', JSON.stringify(updatedLetters));
-    
-    setFeedback('Cover letter saved! This data will help improve future drafts.');
+    showFeedback('Cover letter saved! This data will help improve future drafts.');
     
     // Reset form
     setTimeout(() => {
@@ -237,7 +264,12 @@ const CoverLetterGenerator = () => {
       setCoverLetter('');
       setFinalCoverLetter('');
       setFileContent('');
-      setFeedback('');
+      setJobAnalysis({
+        keyRequirements: '',
+        companyValues: '',
+        specificInterests: '',
+        relevantStories: []
+      });
     }, 2000);
   };
   
@@ -245,18 +277,16 @@ const CoverLetterGenerator = () => {
   const deleteSavedLetter = (id) => {
     const updatedLetters = savedLetters.filter(letter => letter.id !== id);
     setSavedLetters(updatedLetters);
-    localStorage.setItem('savedCoverLetters', JSON.stringify(updatedLetters));
   };
   
   // Delete a previous cover letter
   const deletePreviousCoverLetter = (id) => {
     const updatedLetters = previousCoverLetters.filter(letter => letter.id !== id);
     setPreviousCoverLetters(updatedLetters);
-    localStorage.setItem('previousCoverLetters', JSON.stringify(updatedLetters));
   };
   
   // Use a previous cover letter as the base
-  const loadPreviousCoverLetter = (id) => {
+  const usePreviousCoverLetter = (id) => {
     const letter = previousCoverLetters.find(letter => letter.id === id);
     if (letter) {
       setCoverLetter(letter.content);
@@ -275,288 +305,474 @@ const CoverLetterGenerator = () => {
     document.body.removeChild(element);
   };
 
+  // Generate PDF
+  const generatePDF = () => {
+    const content = finalCoverLetter || coverLetter;
+    if (!content.trim()) {
+      showFeedback('No cover letter content to export');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Cover Letter</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              max-width: 8.5in;
+              margin: 1in auto;
+              padding: 0;
+              font-size: 12pt;
+            }
+            .content {
+              white-space: pre-wrap;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="content">${content}</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   return (
-    <div className="max-w-6xl mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6 text-center">AI Cover Letter Generator</h1>
-      
-      <div className="mb-6 flex border-b">
-        <button 
-          className={`py-2 px-4 ${activeTab === 'generate' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
-          onClick={() => setActiveTab('generate')}
-        >
-          Generate Letter
-        </button>
-        <button 
-          className={`py-2 px-4 ${activeTab === 'profile' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
-          onClick={() => setActiveTab('profile')}
-        >
-          My Profile
-        </button>
-        <button 
-          className={`py-2 px-4 ${activeTab === 'previous' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
-          onClick={() => setActiveTab('previous')}
-        >
-          Previous Letters
-        </button>
-        <button 
-          className={`py-2 px-4 ${activeTab === 'settings' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
-          onClick={() => setActiveTab('settings')}
-        >
-          Settings
-        </button>
-      </div>
-      
-      {feedback && (
-        <div className="mb-6 p-4 bg-blue-50 text-blue-800 rounded-lg">
-          {feedback}
+    <div className="app">
+      <div className="container">
+        <div className="header">
+          <h1>Cover Letter Generator</h1>
+          <p>Create personalized cover letters with AI assistance</p>
         </div>
-      )}
-      
-      {activeTab === 'generate' && (
-        <>
-          <div className="mb-8 p-6 bg-gray-50 rounded-lg shadow">
-            <h2 className="text-xl font-semibold mb-4">Step 1: Enter Job Description</h2>
-            
-            <div className="flex flex-col space-y-4">
-              <label className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100">
-                <div className="text-center">
-                  <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm text-gray-600">
-                    {fileContent ? 'File uploaded' : 'Upload job description or paste below'}
-                  </p>
-                </div>
-                <input type="file" className="hidden" onChange={handleFileUpload} accept=".txt,.pdf,.doc,.docx" />
-              </label>
+        
+        {/* Navigation */}
+        <div className="nav">
+          {[
+            { id: 'generate', label: 'Generate' },
+            { id: 'analysis', label: 'Job Analysis' },
+            { id: 'stories', label: 'Story Bank' },
+            { id: 'profile', label: 'Profile' },
+            { id: 'previous', label: 'Previous Letters' },
+            { id: 'settings', label: 'Settings' }
+          ].map(tab => (
+            <button 
+              key={tab.id}
+              className={`nav-button ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        
+        {/* Feedback */}
+        {feedback && (
+          <div className="feedback">
+            {feedback}
+          </div>
+        )}
+        
+        {/* Generate Tab */}
+        {activeTab === 'generate' && (
+          <div className="tab-content">
+            <div className="content-card">
+              <h2>Job Description</h2>
+              
+              <div className="upload-area" onClick={() => document.getElementById('job-file').click()}>
+                <svg className="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                <p>{fileContent ? 'File uploaded - Click to change' : 'Upload job description'}</p>
+              </div>
+              <input 
+                type="file" 
+                id="job-file"
+                style={{display: 'none'}}
+                onChange={handleFileUpload} 
+                accept=".txt,.pdf,.doc,.docx" 
+              />
               
               <textarea
-                className="w-full h-48 p-3 border border-gray-300 rounded-lg"
-                placeholder="Paste job description here..."
+                className="form-textarea"
+                style={{height: '12rem'}}
+                placeholder="Or paste job description here..."
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
-              ></textarea>
+              />
               
-              <button
-                className="py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
-                onClick={generateCoverLetter}
-                disabled={isGenerating || !jobDescription.trim()}
-              >
-                {isGenerating ? 'Generating...' : 'Generate Cover Letter'}
-              </button>
-            </div>
-          </div>
-          
-          {coverLetter && (
-            <div className="mb-8 p-6 bg-gray-50 rounded-lg shadow">
-              <h2 className="text-xl font-semibold mb-4">Step 2: Edit Draft Cover Letter</h2>
-              
-              <textarea
-                className="w-full h-64 p-3 border border-gray-300 rounded-lg mb-4"
-                value={finalCoverLetter || coverLetter}
-                onChange={(e) => setFinalCoverLetter(e.target.value)}
-              ></textarea>
-              
-              <div className="flex space-x-4">
+              <div className="btn-center">
                 <button
-                  className="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700"
-                  onClick={saveFinalVersion}
+                  className="btn btn-primary"
+                  onClick={generateCoverLetter}
+                  disabled={isGenerating || !jobDescription.trim()}
                 >
-                  Save Final Version
-                </button>
-                <button
-                  className="py-2 px-4 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700"
-                  onClick={exportCoverLetter}
-                >
-                  Export as Text
+                  {isGenerating ? 'Generating...' : 'Generate Cover Letter'}
                 </button>
               </div>
             </div>
-          )}
-        </>
-      )}
-      
-      {activeTab === 'profile' && (
-        <div className="mb-8 p-6 bg-gray-50 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-6">My Professional Profile</h2>
-          
-          <div className="mb-6">
-            <h3 className="text-lg font-medium mb-3">Resume</h3>
-            <p className="text-sm text-gray-600 mb-2">Upload your resume to help personalize your cover letters</p>
             
-            <div className="flex flex-col space-y-4">
-              <label className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100">
-                <div className="text-center">
-                  <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm text-gray-600">
-                    {resume ? 'Resume uploaded - Click to update' : 'Upload your resume'}
-                  </p>
-                </div>
-                <input type="file" className="hidden" onChange={handleResumeUpload} accept=".txt,.pdf,.doc,.docx" />
-              </label>
-              
-              {resume && (
+            {coverLetter && (
+              <div className="content-card">
+                <h2>Your Cover Letter</h2>
+                
                 <textarea
-                  className="w-full h-48 p-3 border border-gray-300 rounded-lg"
-                  value={resume}
-                  onChange={(e) => {
-                    setResume(e.target.value);
-                    localStorage.setItem('resume', e.target.value);
-                  }}
-                ></textarea>
-              )}
+                  className="form-textarea"
+                  style={{height: '24rem'}}
+                  value={finalCoverLetter || coverLetter}
+                  onChange={(e) => setFinalCoverLetter(e.target.value)}
+                />
+                
+                <div className="btn-center">
+                  <button className="btn btn-success" onClick={saveFinalVersion}>
+                    Save Letter
+                  </button>
+                  <button className="btn btn-secondary" onClick={exportCoverLetter}>
+                    Export Text
+                  </button>
+                  <button className="btn btn-danger" onClick={generatePDF}>
+                    Export PDF
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Job Analysis Tab */}
+        {activeTab === 'analysis' && (
+          <div className="tab-content">
+            <div className="content-card">
+              <h2>Job Analysis</h2>
+              <p>Analyze the job and company to create a more targeted cover letter</p>
+              
+              <div className="form-group">
+                <label className="form-label">Key Requirements (skills, experience, qualifications)</label>
+                <textarea
+                  className="form-textarea"
+                  placeholder="List the most important requirements for this role..."
+                  value={jobAnalysis.keyRequirements}
+                  onChange={(e) => setJobAnalysis({...jobAnalysis, keyRequirements: e.target.value})}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Company Values & Mission</label>
+                <textarea
+                  className="form-textarea"
+                  placeholder="What does this company care about? What's their mission?"
+                  value={jobAnalysis.companyValues}
+                  onChange={(e) => setJobAnalysis({...jobAnalysis, companyValues: e.target.value})}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">What Excites You About This Role</label>
+                <textarea
+                  className="form-textarea"
+                  placeholder="Be specific about what interests you about this particular job..."
+                  value={jobAnalysis.specificInterests}
+                  onChange={(e) => setJobAnalysis({...jobAnalysis, specificInterests: e.target.value})}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Relevant Stories from Your Story Bank</label>
+                <div className="story-checkboxes">
+                  {stories.map(story => (
+                    <div key={story.id} className="checkbox-group">
+                      <input
+                        type="checkbox"
+                        id={`story-${story.id}`}
+                        checked={jobAnalysis.relevantStories.includes(story.id.toString())}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setJobAnalysis({
+                              ...jobAnalysis,
+                              relevantStories: [...jobAnalysis.relevantStories, story.id.toString()]
+                            });
+                          } else {
+                            setJobAnalysis({
+                              ...jobAnalysis,
+                              relevantStories: jobAnalysis.relevantStories.filter(id => id !== story.id.toString())
+                            });
+                          }
+                        }}
+                      />
+                      <label htmlFor={`story-${story.id}`}>
+                        {story.title || 'Untitled Story'} ({story.category})
+                      </label>
+                    </div>
+                  ))}
+                  {stories.length === 0 && (
+                    <p className="empty-text">No stories in your Story Bank yet. Add some in the Story Bank tab!</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-          
-          <div className="mb-6">
-            <h3 className="text-lg font-medium mb-3">LinkedIn Profile</h3>
-            <p className="text-sm text-gray-600 mb-2">Add your LinkedIn profile information for additional context</p>
-            
-            <textarea
-              className="w-full h-32 p-3 border border-gray-300 rounded-lg"
-              placeholder="Paste LinkedIn profile information or URL here..."
-              value={linkedinProfile}
-              onChange={(e) => {
-                setLinkedinProfile(e.target.value);
-                localStorage.setItem('linkedinProfile', e.target.value);
-              }}
-            ></textarea>
-          </div>
-        </div>
-      )}
-      
-      {activeTab === 'previous' && (
-        <div className="mb-8 p-6 bg-gray-50 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-6">Previous Cover Letters</h2>
-          <p className="text-sm text-gray-600 mb-4">Upload examples of your previous cover letters to help the AI match your style and tone</p>
-          
-          <div className="flex flex-col space-y-4 mb-6">
-            <label className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100">
-              <div className="text-center">
-                <History className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm text-gray-600">
-                  Upload previous cover letters (you can select multiple files)
-                </p>
-              </div>
-              <input type="file" className="hidden" onChange={handlePreviousCoverLetterUpload} accept=".txt,.pdf,.doc,.docx" multiple />
-            </label>
-          </div>
-          
-          {previousCoverLetters.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium mb-2">Uploaded Cover Letters</h3>
+        )}
+
+        {/* Story Bank Tab */}
+        {activeTab === 'stories' && (
+          <div className="tab-content">
+            <div className="content-card">
+              <h2>Story Bank</h2>
+              <p>Pre-write stories about your experiences to easily incorporate into cover letters</p>
               
-              {previousCoverLetters.map(letter => (
-                <div key={letter.id} className="p-4 border border-gray-300 rounded-lg">
-                  <div className="flex justify-between mb-2">
-                    <p className="text-sm font-medium">{letter.name}</p>
-                    <div className="flex space-x-2">
-                      <button
-                        className="text-blue-600 hover:text-blue-800 text-sm"
-                        onClick={() => loadPreviousCoverLetter(letter.id)}
+              <div className="btn-center">
+                <button className="btn btn-primary" onClick={addStory}>
+                  Add New Story
+                </button>
+              </div>
+
+              <div className="stories-container">
+                {stories.map(story => (
+                  <div key={story.id} className="story-item">
+                    <div className="story-grid">
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Story title (e.g., 'Appalachian Trail Leadership')"
+                        value={story.title}
+                        onChange={(e) => updateStory(story.id, 'title', e.target.value)}
+                      />
+                      <select
+                        className="form-input"
+                        value={story.category}
+                        onChange={(e) => updateStory(story.id, 'category', e.target.value)}
                       >
-                        Use as Template
-                      </button>
+                        <option value="">Select category</option>
+                        <option value="Leadership">Leadership</option>
+                        <option value="Problem Solving">Problem Solving</option>
+                        <option value="Persistence/Grit">Persistence/Grit</option>
+                        <option value="Climate/Sustainability">Climate/Sustainability</option>
+                        <option value="Product Thinking">Product Thinking</option>
+                        <option value="Teamwork">Teamwork</option>
+                        <option value="Innovation">Innovation</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    
+                    <textarea
+                      className="form-textarea story-content"
+                      placeholder="Write your story here... Focus on specific actions, results, and what you learned."
+                      value={story.content}
+                      onChange={(e) => updateStory(story.id, 'content', e.target.value)}
+                    />
+                    
+                    <div className="story-actions">
+                      <input
+                        type="text"
+                        className="form-input skills-input"
+                        placeholder="Skills demonstrated (comma-separated)"
+                        value={story.skills.join(', ')}
+                        onChange={(e) => updateStory(story.id, 'skills', e.target.value)}
+                      />
                       <button
-                        className="text-red-600 hover:text-red-800 text-sm"
-                        onClick={() => deletePreviousCoverLetter(letter.id)}
+                        className="link-button danger"
+                        onClick={() => deleteStory(story.id)}
                       >
                         Delete
                       </button>
                     </div>
                   </div>
-                  <p className="text-gray-800 text-sm line-clamp-2">
-                    {letter.content.substring(0, 120)}...
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {previousCoverLetters.length === 0 && (
-            <div className="text-center py-4 text-gray-500">
-              No previous cover letters uploaded yet.
-            </div>
-          )}
-        </div>
-      )}
-      
-      {activeTab === 'settings' && (
-        <div className="mb-8 p-6 bg-gray-50 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-6">API Settings</h2>
-          
-          <div className="mb-6">
-            <h3 className="text-lg font-medium mb-3">AI API Key</h3>
-            <p className="text-sm text-gray-600 mb-2">Enter your API key to connect to the AI service</p>
-            
-            <div className="flex flex-col space-y-4">
-              <input
-                type="password"
-                className="w-full p-3 border border-gray-300 rounded-lg"
-                placeholder="Enter your API key..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-              />
-              
-              <button
-                className="py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 w-40"
-                onClick={saveApiKey}
-              >
-                Save API Key
-              </button>
-            </div>
-            
-            <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-              <h4 className="text-md font-medium mb-2">API Information</h4>
-              <p className="text-sm text-gray-600">
-                This application uses the Claude API from Anthropic. You'll need to sign up for an account 
-                at <a href="https://console.anthropic.com" className="text-blue-600 hover:underline" target="_blank" rel="noreferrer">console.anthropic.com</a> and
-                create an API key.
-              </p>
-              <p className="text-sm text-gray-600 mt-2">
-                Your API key is stored locally in your browser and is not sent to any server except for 
-                Anthropic's API when generating cover letters.
-              </p>
+                ))}
+                
+                {stories.length === 0 && (
+                  <div className="empty-state">
+                    <p>No stories yet! Start building your story bank.</p>
+                    <p>Examples: AT hike experiences, climate projects, product insights, professional achievements</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-      
-      {activeTab === 'generate' && savedLetters.length > 0 && (
-        <div className="mb-8 p-6 bg-gray-50 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">Your Generated Cover Letters</h2>
-          
-          <div className="space-y-4">
-            {savedLetters.map(letter => (
-              <div key={letter.id} className="p-4 border border-gray-300 rounded-lg">
-                <div className="flex justify-between mb-2">
-                  <p className="text-sm text-gray-600">
-                    {new Date(letter.date).toLocaleDateString()}
-                  </p>
-                  <button
-                    className="text-red-600 hover:text-red-800"
-                    onClick={() => deleteSavedLetter(letter.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-                <p className="text-gray-800 mb-2 line-clamp-2">
-                  {letter.jobDescription.substring(0, 100)}...
-                </p>
-                <div className="flex space-x-2">
-                  <button
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                    onClick={() => {
-                      setCoverLetter(letter.final);
-                      setFinalCoverLetter(letter.final);
-                    }}
-                  >
-                    View Full Letter
+        )}
+        
+        {/* Profile Tab */}
+        {activeTab === 'profile' && (
+          <div className="tab-content">
+            <div className="content-card">
+              <h2>Resume</h2>
+              
+              <div className="upload-area" onClick={() => document.getElementById('resume-file').click()}>
+                <svg className="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                <p>{resume ? 'Resume uploaded - Click to update' : 'Upload your resume'}</p>
+              </div>
+              <input 
+                type="file" 
+                id="resume-file"
+                style={{display: 'none'}}
+                onChange={handleResumeUpload} 
+                accept=".txt,.pdf,.doc,.docx" 
+              />
+              
+              {resume && (
+                <textarea
+                  className="form-textarea"
+                  style={{height: '12rem'}}
+                  value={resume}
+                  onChange={(e) => setResume(e.target.value)}
+                />
+              )}
+            </div>
+            
+            <div className="content-card">
+              <h2>LinkedIn Profile</h2>
+              <textarea
+                className="form-textarea"
+                style={{height: '8rem'}}
+                placeholder="Add your LinkedIn profile information or URL here..."
+                value={linkedinProfile}
+                onChange={(e) => setLinkedinProfile(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+        
+        {/* Previous Letters Tab */}
+        {activeTab === 'previous' && (
+          <div className="tab-content">
+            <div className="content-card">
+              <h2>Previous Cover Letters</h2>
+              <p>Upload examples to help AI match your writing style</p>
+              
+              <div className="upload-area" onClick={() => document.getElementById('previous-files').click()}>
+                <svg className="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                <p>Upload previous cover letters (multiple files allowed)</p>
+              </div>
+              <input 
+                type="file" 
+                id="previous-files"
+                style={{display: 'none'}}
+                onChange={handlePreviousCoverLetterUpload} 
+                accept=".txt,.pdf,.doc,.docx" 
+                multiple 
+              />
+              
+              <div className="letters-container">
+                {previousCoverLetters.map(letter => (
+                  <div key={letter.id} className="saved-letter">
+                    <div className="saved-letter-header">
+                      <h4>{letter.name}</h4>
+                      <div>
+                        <button
+                          className="link-button"
+                          onClick={() => usePreviousCoverLetter(letter.id)}
+                        >
+                          Use as Template
+                        </button>
+                        <button
+                          className="link-button danger"
+                          onClick={() => deletePreviousCoverLetter(letter.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                    <p className="saved-letter-text">
+                      {letter.content.substring(0, 150)}...
+                    </p>
+                  </div>
+                ))}
+                
+                {previousCoverLetters.length === 0 && (
+                  <div className="empty-state">
+                    No previous cover letters uploaded yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="tab-content">
+            <div className="content-card">
+              <h2>API Settings</h2>
+              
+              <div className="form-group">
+                <label className="form-label">Claude API Key</label>
+                <input
+                  type="password"
+                  className="form-input"
+                  placeholder="Enter your API key..."
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+                
+                <div className="btn-center">
+                  <button className="btn btn-primary" onClick={saveApiKey}>
+                    Save API Key
                   </button>
                 </div>
               </div>
-            ))}
+              
+              <div className="info-box">
+                <h4>API Information</h4>
+                <p>
+                  This application uses the Claude API from Anthropic. You'll need to create an account 
+                  at <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">console.anthropic.com</a> and
+                  create an API key.
+                </p>
+                <p>
+                  Your API key is stored locally in your browser and is only sent to 
+                  Anthropic's API when generating cover letters.
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+        
+        {/* Saved Letters */}
+        {activeTab === 'generate' && savedLetters.length > 0 && (
+          <div className="content-card">
+            <h2>Your Saved Cover Letters</h2>
+            
+            <div className="letters-container">
+              {savedLetters.map(letter => (
+                <div key={letter.id} className="saved-letter">
+                  <div className="saved-letter-header">
+                    <span className="saved-letter-date">
+                      {new Date(letter.date).toLocaleDateString()}
+                    </span>
+                    <button
+                      className="link-button danger"
+                      onClick={() => deleteSavedLetter(letter.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <p className="saved-letter-text">
+                    {letter.jobDescription.substring(0, 120)}...
+                  </p>
+                  <button
+                    className="link-button"
+                    onClick={() => {
+                      setCoverLetter(letter.final);
+                      setFinalCoverLetter(letter.final);
+                      if (letter.jobAnalysis) {
+                        setJobAnalysis(letter.jobAnalysis);
+                      }
+                    }}
+                  >
+                    Load Letter & Analysis
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
